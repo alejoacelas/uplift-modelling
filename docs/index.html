@@ -1,14 +1,319 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#f6f5ef"><title>AI uplift — a model you can play with</title><link rel="stylesheet" href="style.css"></head>
-<body><header><a class="brand" href="#">UPLIFT / MODEL LAB</a><span>A working hypothesis, not a forecast</span></header>
-<main><section class="intro"><p class="eyebrow">01 / THE SIMPLEST PICTURE</p><h1>More within reach.<br>More value over time.</h1><p class="lede">People can settle at very different levels of AI use. In this model, coaching makes more applications reachable. Adoption catches up, and the gains last.</p><div class="premises"><span>Fixed AI capabilities</span><span>Binary task adoption</span><span>One personal parameter</span></div></section>
-<section class="lab" aria-labelledby="lab-title"><div class="lab-head"><div><p class="eyebrow">EXPLORE THE TRAJECTORY</p><h2 id="lab-title">A higher plateau, not a faster clock.</h2></div><button id="reset" class="quiet">Reset model</button></div>
-<div class="presets" aria-label="Example scenarios"><button data-preset="default">A useful coaching session</button><button data-preset="stuck">Stuck at low adoption</button><button data-preset="fast">A near-instant unlock</button><button data-preset="ceiling">Already near the ceiling</button></div>
-<div class="workspace"><aside class="controls"><div class="control"><label for="p">Applications within reach <output id="p-out"></output></label><input id="p" type="range" min="0" max="100" step="1"><p>The personal parameter, <i>p</i>. Sets the plateau before coaching.</p></div><div class="control"><label for="d">Coaching expands reach by <output id="d-out"></output></label><input id="d" type="range" min="0" max="100" step="1"><p>Percentage points added to <i>p</i>, capped at 100% total. An assumed effect, not a prediction.</p></div><div class="control"><label for="h">Time to adopt half of what is reachable <output id="h-out"></output></label><input id="h" type="range" min="0.2" max="12" step="0.1"><p>The shared adjustment speed. Coaching does not change it.</p></div><div class="control"><label for="tc">Coaching happens at <output id="tc-out"></output></label><input id="tc" type="range" min="0" max="12" step="0.25"></div><details><summary>Opportunity & time horizon</summary><div class="control"><label for="V">Available value <output id="V-out"></output></label><input id="V" type="range" min="1" max="30" step="1"><p>Illustrative hours saved per week, net of setup and checking costs.</p></div><div class="control"><label for="H">Show <output id="H-out"></output></label><input id="H" type="range" min="4" max="52" step="1"><p>Long horizons show the mathematics; fixed technology becomes less plausible.</p></div></details></aside>
-<div class="visual"><div class="chart-top"><span>Value from AI · hours saved per week</span><label class="check"><input id="sample" type="checkbox"> Show one simulated person</label></div><div id="main-chart" class="chart" role="img" aria-label="AI value over time with and without coaching"></div><div class="legend"><span class="key base">Without coaching</span><span class="key coached">With coaching</span><span class="key ceiling">Reachable plateau</span></div><div class="scrubber"><button id="play" aria-label="Play timeline">▶ Play</button><label for="time">Inspect week <output id="time-out"></output></label><input id="time" type="range" min="0" max="12" step="0.05"></div><div class="metrics" aria-live="polite"><div><span>Without coaching</span><strong id="metric-base"></strong></div><div><span>With coaching</span><strong id="metric-total"></strong></div><div><span>Extra hours saved so far</span><strong id="metric-cumulative"></strong></div></div><p id="insight" class="insight"></p></div></div>
-</section>
-<section class="tasks-section"><div class="section-heading"><div><p class="eyebrow">02 / WHAT THE CURVE IS MADE OF</p><h2>100 applications. Each adopted, or not.</h2></div><button id="resample" class="quiet">Resimulate this person ↻</button></div><p class="section-copy">These are illustrative, equally valuable applications in the same role. The smooth curve averages over possible adoption times; this grid shows one possible history. Move the timeline above to watch it unfold.</p><div class="task-layout"><div><div id="task-grid" class="task-grid" aria-label="100 simulated AI applications"></div><div class="legend task-legend"><span class="key adopted">Adopted</span><span class="key waiting">Reachable, waiting</span><span class="key new">Opened by coaching</span><span class="key outside">Outside reach</span></div></div><div class="task-readout"><p class="eyebrow" id="task-week"></p><strong id="task-count"></strong><p id="task-description"></p><p class="muted">Each tile contributes <span id="task-value"></span> once adopted. Tiles stay adopted. New reach starts at the coaching date.</p></div></div></section>
-<section class="mechanics"><p class="eyebrow">03 / THE WHOLE MODEL</p><h2>One gap drives progress.</h2><div class="equation-main"><span>growth in value</span><b>=</b><span>adoption rate</span><b>×</b><span>(reachable value − current value)</span></div><p class="section-copy">Progress slows as accessible opportunities run out. Low adoption can persist because some applications remain outside reach—not because everyone is slowly approaching the same destination.</p><details><summary>See the equations and assumptions</summary><div class="equations"><div><h3>Before coaching</h3><p class="formula">g(t) = Vp (1 − e<sup>−λt</sup>)</p><p><i>g</i> is expected value; <i>V</i> is available value; <i>p</i> is the reachable share. Everyone starts with zero adoption. λ = ln(2) / half-time.</p></div><div><h3>Additional value after coaching</h3><p class="formula">Δg(t) = Vδ (1 − e<sup>−λ(t−t<sub>c</sub>)</sup>)</p><p>Applies after coaching at <i>t<sub>c</sub></i>; before that, Δg = 0. The reachable share increases by δ, with p + δ ≤ 1. Total value is g + Δg.</p></div></div><ul><li>Every reachable, unadopted application has the same constant adoption hazard λ. Coaching expands reach but does not change λ.</li><li>The grid uses exactly 100 equal-value applications, independent adoption clocks, and no abandonment. New applications get clocks starting at coaching.</li><li>The baseline and coached simulation share the same adoption times for originally reachable applications, isolating coaching’s added effect.</li><li>Benefits add up. There are no task dependencies, transfer effects, or changes in AI capabilities. Coaching’s effect is supplied, not explained.</li><li>Hours saved per week measure a flow. “Extra hours saved so far” is the area between curves, not the gap at a single date.</li></ul></details></section>
-<section class="comparison"><p class="eyebrow">04 / WHAT WOULD A DIFFERENT MODEL SAY?</p><h2>Slow adoption or a lasting ceiling?</h2><p class="section-copy">Compare our model with one where every application is reachable but adoption is slower. The two curves have exactly the same initial slope. Early data can make them look alike.</p><div id="compare-chart" class="chart small-chart" role="img" aria-label="Comparison of limited reach and slower universal adoption"></div><div class="legend"><span class="key base">Limited reach · current p and speed</span><span class="key alternative">All reachable · slower rate λ × p</span></div><p id="compare-insight" class="insight"></p><p class="muted">This comparison excludes coaching. It is a change in explanation, not an extra mechanism added to the main model.</p></section>
-<section class="targeting"><p class="eyebrow">05 / WHO SHOULD WE HELP?</p><h2>The answer depends on responsiveness.</h2><p class="section-copy">The model does not tell us how much coaching changes reach. Try three assumptions. Each can lead to a different targeting conclusion, even with the same opportunity and adjustment speed.</p><div class="target-controls"><div><label for="rule">Assumed coaching response</label><select id="rule"><option value="fixed">Same increase for everyone (until the ceiling)</option><option value="remaining">Same fraction of remaining opportunity</option><option value="middle">Response needs some existing proficiency</option></select></div><div><label for="k">Response strength <output id="k-out"></output></label><input id="k" type="range" min="0" max="100" value="40"></div></div><div id="target-chart" class="chart small-chart" role="img" aria-label="Long-run coaching benefit by starting reachable share"></div><p id="target-insight" class="insight"></p><p class="muted">This panel is a separate thought experiment; it does not change the main coaching slider. The vertical marker is your current p. Curves show added hours saved per week at the new plateau, with equal coaching costs. These response rules are hypotheses, not evidence.</p></section>
-<footer><p>A small model for asking better questions.</p><p>Illustrative parameters · no fitted data · all calculations run in your browser</p><button id="copy" class="quiet">Copy link to these settings</button><span id="copy-status" role="status"></span></footer></main><script type="module" src="app.mjs"></script></body></html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="theme-color" content="#f6f5ef" />
+    <title>AI uplift — a model you can play with</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header>
+      <a class="brand" href="#">UPLIFT / MODEL LAB</a
+      ><span>A working hypothesis, not a forecast</span>
+    </header>
+    <main>
+      <section class="intro">
+        <p class="eyebrow">01 / THE SIMPLEST PICTURE</p>
+        <h1>More within reach.<br />More value over time.</h1>
+        <p class="lede">
+          People can settle at very different levels of AI use. In this model,
+          coaching makes more applications reachable. Adoption catches up, and
+          the gains last.
+        </p>
+        <div class="premises">
+          <span>Fixed AI capabilities</span><span>Binary task adoption</span
+          ><span>One personal parameter</span>
+        </div>
+      </section>
+      <section class="lab" aria-labelledby="lab-title">
+        <div class="lab-head">
+          <div>
+            <p class="eyebrow">EXPLORE THE TRAJECTORY</p>
+            <h2 id="lab-title">A higher plateau, not a faster clock.</h2>
+          </div>
+          <button id="reset" class="quiet">Reset model</button>
+        </div>
+        <div class="presets" aria-label="Example scenarios">
+          <button data-preset="default">A useful coaching session</button
+          ><button data-preset="stuck">Stuck at low adoption</button
+          ><button data-preset="fast">A near-instant unlock</button
+          ><button data-preset="ceiling">Already near the ceiling</button>
+        </div>
+        <div class="workspace">
+          <aside class="controls">
+            <div class="control">
+              <label for="p"
+                >Applications within reach <output id="p-out"></output></label
+              ><input id="p" type="range" min="0" max="100" step="1" />
+              <p>
+                The personal parameter, <i>p</i>. Sets the plateau before
+                coaching.
+              </p>
+            </div>
+            <div class="control">
+              <label for="d"
+                >Coaching expands reach by <output id="d-out"></output></label
+              ><input id="d" type="range" min="0" max="100" step="1" />
+              <p>
+                Percentage points added to <i>p</i>, capped at 100% total. An
+                assumed effect, not a prediction.
+              </p>
+            </div>
+            <div class="control">
+              <label for="h"
+                >Time to adopt half of what is reachable
+                <output id="h-out"></output></label
+              ><input id="h" type="range" min="0.2" max="12" step="0.1" />
+              <p>The shared adjustment speed. Coaching does not change it.</p>
+            </div>
+            <div class="control">
+              <label for="tc"
+                >Coaching happens at <output id="tc-out"></output></label
+              ><input id="tc" type="range" min="0" max="12" step="0.25" />
+            </div>
+            <details>
+              <summary>Opportunity & time horizon</summary>
+              <div class="control">
+                <label for="V"
+                  >Available value <output id="V-out"></output></label
+                ><input id="V" type="range" min="1" max="30" step="1" />
+                <p>
+                  Illustrative hours saved per week, net of setup and checking
+                  costs.
+                </p>
+              </div>
+              <div class="control">
+                <label for="H">Show <output id="H-out"></output></label
+                ><input id="H" type="range" min="4" max="52" step="1" />
+                <p>
+                  Long horizons show the mathematics; fixed technology becomes
+                  less plausible.
+                </p>
+              </div>
+            </details>
+          </aside>
+          <div class="visual">
+            <div class="chart-top">
+              <span>Value from AI · hours saved per week</span
+              ><label class="check"
+                ><input id="sample" type="checkbox" /> Show one simulated
+                person</label
+              >
+            </div>
+            <div
+              id="main-chart"
+              class="chart"
+              role="img"
+              aria-label="AI value over time with and without coaching"
+            ></div>
+            <div class="legend">
+              <span class="key base">Without coaching</span
+              ><span class="key coached">With coaching</span
+              ><span class="key ceiling">Reachable plateau</span>
+            </div>
+            <div class="scrubber">
+              <button id="play" aria-label="Play timeline">▶ Play</button
+              ><label for="time"
+                >Inspect week <output id="time-out"></output></label
+              ><input id="time" type="range" min="0" max="12" step="0.05" />
+            </div>
+            <div class="metrics" aria-live="polite">
+              <div>
+                <span>Without coaching</span><strong id="metric-base"></strong>
+              </div>
+              <div>
+                <span>With coaching</span><strong id="metric-total"></strong>
+              </div>
+              <div>
+                <span>Extra hours saved so far</span
+                ><strong id="metric-cumulative"></strong>
+              </div>
+            </div>
+            <p id="insight" class="insight"></p>
+          </div>
+        </div>
+      </section>
+      <section class="tasks-section">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">02 / WHAT THE CURVE IS MADE OF</p>
+            <h2>100 applications. Each adopted, or not.</h2>
+          </div>
+          <button id="resample" class="quiet">Resimulate this person ↻</button>
+        </div>
+        <p class="section-copy">
+          These are illustrative, equally valuable applications in the same
+          role. The smooth curve averages over possible adoption times; this
+          grid shows one possible history. Move the timeline above to watch it
+          unfold.
+        </p>
+        <div class="task-layout">
+          <div>
+            <div
+              id="task-grid"
+              class="task-grid"
+              aria-label="100 simulated AI applications"
+            ></div>
+            <div class="legend task-legend">
+              <span class="key adopted">Adopted</span
+              ><span class="key waiting">Reachable, waiting</span
+              ><span class="key new">Opened by coaching</span
+              ><span class="key outside">Outside reach</span>
+            </div>
+          </div>
+          <div class="task-readout">
+            <p class="eyebrow" id="task-week"></p>
+            <strong id="task-count"></strong>
+            <p id="task-description"></p>
+            <p class="muted">
+              Each tile contributes <span id="task-value"></span> once adopted.
+              Tiles stay adopted. New reach starts at the coaching date.
+            </p>
+          </div>
+        </div>
+      </section>
+      <section class="mechanics">
+        <p class="eyebrow">03 / THE WHOLE MODEL</p>
+        <h2>One gap drives progress.</h2>
+        <div class="equation-main">
+          <span>growth in value</span><b>=</b><span>adoption rate</span><b>×</b
+          ><span>(reachable value − current value)</span>
+        </div>
+        <p class="section-copy">
+          Progress slows as accessible opportunities run out. Low adoption can
+          persist because some applications remain outside reach—not because
+          everyone is slowly approaching the same destination.
+        </p>
+        <details>
+          <summary>See the equations and assumptions</summary>
+          <div class="equations">
+            <div>
+              <h3>Before coaching</h3>
+              <p class="formula">g(t) = Vp (1 − e<sup>−λt</sup>)</p>
+              <p>
+                <i>g</i> is expected value; <i>V</i> is available value;
+                <i>p</i> is the reachable share. Everyone starts with zero
+                adoption. λ = ln(2) / half-time.
+              </p>
+            </div>
+            <div>
+              <h3>Additional value after coaching</h3>
+              <p class="formula">
+                Δg(t) = Vδ (1 − e<sup>−λ(t−t<sub>c</sub>)</sup>)
+              </p>
+              <p>
+                Applies after coaching at <i>t<sub>c</sub></i
+                >; before that, Δg = 0. The reachable share increases by δ, with
+                p + δ ≤ 1. Total value is g + Δg.
+              </p>
+            </div>
+          </div>
+          <ul>
+            <li>
+              Every reachable, unadopted application has the same constant
+              adoption hazard λ. Coaching expands reach but does not change λ.
+            </li>
+            <li>
+              The grid uses exactly 100 equal-value applications, independent
+              adoption clocks, and no abandonment. New applications get clocks
+              starting at coaching.
+            </li>
+            <li>
+              The baseline and coached simulation share the same adoption times
+              for originally reachable applications, isolating coaching’s added
+              effect.
+            </li>
+            <li>
+              Benefits add up. There are no task dependencies, transfer effects,
+              or changes in AI capabilities. Coaching’s effect is supplied, not
+              explained.
+            </li>
+            <li>
+              Hours saved per week measure a flow. “Extra hours saved so far” is
+              the area between curves, not the gap at a single date.
+            </li>
+          </ul>
+        </details>
+      </section>
+      <section class="comparison">
+        <p class="eyebrow">04 / WHAT WOULD A DIFFERENT MODEL SAY?</p>
+        <h2>Slow adoption or a lasting ceiling?</h2>
+        <p class="section-copy">
+          Compare our model with one where every application is reachable but
+          adoption is slower. The two curves have exactly the same initial
+          slope. Early data can make them look alike.
+        </p>
+        <div
+          id="compare-chart"
+          class="chart small-chart"
+          role="img"
+          aria-label="Comparison of limited reach and slower universal adoption"
+        ></div>
+        <div class="legend">
+          <span class="key base">Limited reach · current p and speed</span
+          ><span class="key alternative"
+            >All reachable · slower rate λ × p</span
+          >
+        </div>
+        <p id="compare-insight" class="insight"></p>
+        <p class="muted">
+          This comparison excludes coaching. It is a change in explanation, not
+          an extra mechanism added to the main model.
+        </p>
+      </section>
+      <section class="targeting">
+        <p class="eyebrow">05 / WHO SHOULD WE HELP?</p>
+        <h2>The answer depends on responsiveness.</h2>
+        <p class="section-copy">
+          The model does not tell us how much coaching changes reach. Try three
+          assumptions. Each can lead to a different targeting conclusion, even
+          with the same opportunity and adjustment speed.
+        </p>
+        <div class="target-controls">
+          <div>
+            <label for="rule">Assumed coaching response</label
+            ><select id="rule">
+              <option value="fixed">
+                Same increase for everyone (until the ceiling)
+              </option>
+              <option value="remaining">
+                Same fraction of remaining opportunity
+              </option>
+              <option value="middle">
+                Response needs some existing proficiency
+              </option>
+            </select>
+          </div>
+          <div>
+            <label for="k">Response strength <output id="k-out"></output></label
+            ><input id="k" type="range" min="0" max="100" value="40" />
+          </div>
+        </div>
+        <div
+          id="target-chart"
+          class="chart small-chart"
+          role="img"
+          aria-label="Long-run coaching benefit by starting reachable share"
+        ></div>
+        <p id="target-insight" class="insight"></p>
+        <p class="muted">
+          This panel is a separate thought experiment; it does not change the
+          main coaching slider. The vertical marker is your current p. Curves
+          show added hours saved per week at the new plateau, with equal
+          coaching costs. These response rules are hypotheses, not evidence.
+        </p>
+      </section>
+      <footer>
+        <p>A small model for asking better questions.</p>
+        <p>
+          Illustrative parameters · no fitted data · all calculations run in
+          your browser
+        </p>
+        <button id="copy" class="quiet">Copy link to these settings</button
+        ><span id="copy-status" role="status"></span>
+      </footer>
+    </main>
+    <script type="module" src="app.mjs"></script>
+  </body>
+</html>
