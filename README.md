@@ -1,18 +1,20 @@
-# AI uplift model lab
+# AI adoption: anatomy of a model
 
-An interactive explainer of persistent differences in AI adoption and the effects of coaching. Open **[the explainer](https://alejoacelas.github.io/uplift-modelling/)**.
+**[Open the interactive theory notebook](https://alejoacelas.github.io/uplift-modelling/).**
 
-The model gives each person a reachable share of applications, `p`. Reachable applications are adopted at a common constant hazard. Coaching expands that share without changing the hazard. The explainer includes expected and simulated trajectories, cumulative benefits, an alternative model with universal eventual adoption, and explicit assumptions about coaching responsiveness.
+Explore which behavioral restrictions generate different functional forms, rather than calibrating parameter values. The notebook links application-level hazards to aggregate dynamics, derivations, time paths, phase diagrams, and observable restrictions.
 
-These are illustrative hypotheses, not estimates from data. AI capabilities and tasks stay fixed. Applications have equal value in the simulation, adoption is permanent, and benefits add up.
+Compare limited reach, universal adoption, unequal task hazards, and adoption feedback. Then distinguish coaching that expands reach, raises the hazard, or shifts current adoption. A final panel tests each specification against candidate stylized facts and explains identification limits.
 
-## Run locally
+Technology and task values are fixed. Curves illustrate mathematical shapes, not fitted estimates. The feedback model is a deterministic approximation. See the notebook for assumptions and normalization.
 
-Requires Python 3 for serving and Node.js for tests. No build or dependencies.
+## Development
+
+No build or dependencies. Serve with Python and test with Node:
 
 ```sh
-python3 -m http.server 8765 --directory docs
-node --test tests/model.test.mjs
+python3 -m http.server 8876 --directory docs
+node --test tests/*.test.mjs
 ```
 
-Open http://localhost:8765. Settings can be shared in the URL using the button at the bottom. `docs/model.mjs` contains the equations and seeded simulation; `docs/app.mjs` renders the interactive views. GitHub Pages serves `docs/` from `main`.
+`docs/forms.mjs` contains the current models; `docs/app.mjs` renders the notebook. GitHub Pages serves `docs/` from `main`. `docs/model.mjs` and its tests retain the earlier parameter explorer's mathematical implementation for reference; the current interface does not use it.

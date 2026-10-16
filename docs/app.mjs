@@ -1,387 +1,437 @@
-import {
-  clamp,
-  rate,
-  baseline,
-  uplift,
-  total,
-  cumulative,
-  response,
-  tasks,
-  realised,
-} from "./model.mjs";
-const $ = (id) => document.getElementById(id),
-  defaults = {
-    p: 0.25,
-    d: 0.3,
-    h: 1.5,
-    tc: 4,
-    V: 10,
-    H: 12,
-    time: 8,
-    seed: 27,
-    sample: false,
-    rule: "remaining",
-    k: 0.4,
-  };
-let s = { ...defaults },
-  timer = null;
-function readSettings() {
-  s = { ...defaults };
-  try {
-    const q = new URLSearchParams(location.hash.slice(1));
-    for (const key of ["p", "d", "h", "tc", "V", "H", "time", "seed", "k"])
-      if (q.has(key) && Number.isFinite(+q.get(key))) s[key] = +q.get(key);
-    s.p = clamp(Math.round(s.p * 100), 0, 100) / 100;
-    s.d = clamp(Math.round(s.d * 100), 0, 100) / 100;
-    s.h = clamp(s.h, 0.2, 12);
-    s.H = clamp(s.H, 4, 52);
-    s.V = clamp(s.V, 1, 30);
-    s.tc = clamp(s.tc, 0, s.H);
-    s.time = clamp(s.time, 0, s.H);
-    s.k = clamp(s.k, 0, 1);
-    s.seed = Math.floor(clamp(s.seed, 1, 2147483647));
-    s.sample = q.get("sample") === "true";
-    if (["fixed", "remaining", "middle"].includes(q.get("rule")))
-      s.rule = q.get("rule");
-  } catch {}
-}
-readSettings();
-const fmt = (n, d = 1) => n.toFixed(d),
-  pct = (n) => `${Math.round(n * 100)}%`;
-function sync() {
-  s.d = Math.min(s.d, 1 - s.p);
-  $("d").max = Math.round((1 - s.p) * 100);
-  $("tc").max = s.H;
-  $("time").max = s.H;
-  for (const key of ["p", "d", "h", "tc", "V", "H", "time", "k"])
-    $(key).value = ["p", "d", "k"].includes(key)
-      ? Math.round(s[key] * 100)
-      : s[key];
-  $("sample").checked = s.sample;
-  $("rule").value = s.rule;
-}
-function chart(
+import { P, curve, growth, coached, logGap } from "./forms.mjs";
+const $ = (id) => document.getElementById(id);
+let model = "restricted",
+  view = "level",
+  coach = "reach";
+const models = {
+  restricted: {
+    assumption:
+      "A fixed share p of value is reachable. Every remaining reachable application has the same constant hazard. Applications outside reach have zero hazard.",
+    law: "ẏ = p − y",
+    solution: "y(t) = p(1 − e<sup>−t</sup>)",
+    restriction:
+      "Different people can have different plateaus with the same adjustment speed. The normalized gap (p − y)/p shrinks at a constant proportional rate. Growth never accelerates along an uninterrupted path.",
+    phase:
+      "A straight, downward-sloping line. Growth is proportional to remaining reachable opportunity; it vanishes at p.",
+    steps: [
+      [
+        "An application-level hazard",
+        "Pr(adopt in dt | reachable, unadopted) = dt + o(dt)",
+        "Time is normalized so the common hazard is one.",
+      ],
+      [
+        "Aggregate remaining reachable value",
+        "ẏ = p − y",
+        "With additive fixed values and a common hazard, expected inflow equals remaining reachable value.",
+      ],
+      [
+        "Separate variables and integrate",
+        "dy / (p − y) = dt",
+        "Starting from zero, −log[(p − y)/p] = t.",
+      ],
+      [
+        "Solve",
+        "y(t) = p(1 − e<sup>−t</sup>)",
+        "The exponential follows from constant proportional gap closure, not merely from the presence of a plateau.",
+      ],
+    ],
+  },
+  universal: {
+    assumption:
+      "All available value is reachable: p = 1. A common constant hazard governs adoption. People differ only in how fast they traverse the same path.",
+    law: "ẏ = 1 − y",
+    solution: "y(t) = 1 − e<sup>−t</sup>",
+    restriction:
+      "Any strictly positive adoption rate eventually delivers all available value. A slower clock delays convergence but cannot create a permanently lower plateau.",
+    phase:
+      "Growth is linear in the gap to full adoption. The only steady state is y = 1.",
+    steps: [
+      [
+        "Remove the inaccessible set",
+        "p = 1",
+        "Every application has a positive common adoption hazard.",
+      ],
+      [
+        "Aggregate",
+        "ẏ = 1 − y",
+        "The remaining opportunity is the whole unadopted share.",
+      ],
+      [
+        "Integrate",
+        "y(t) = 1 − e<sup>−t</sup>",
+        "A different constant hazard λ replaces t with λt: it rescales time, not the destination.",
+      ],
+    ],
+  },
+  heterogeneous: {
+    assumption:
+      "Reach remains limited to p, but accessible applications differ in their fixed adoption hazards. Fast applications are disproportionately adopted first.",
+    law: "ẏ = h̄(t) (p − y)",
+    solution: "y(t) = p[1 − E(e<sup>−λt</sup>)]",
+    restriction:
+      "Fixed heterogeneity in positive hazards produces a mixture of exponentials. The aggregate hazard falls as easy applications disappear. It cannot by itself generate accelerating growth from zero.",
+    phase:
+      "The trajectory bends rather than following a straight line. Current aggregate adoption hides which kinds of applications remain; this is not a general one-state law.",
+    steps: [
+      [
+        "Condition on application hazard",
+        "Pr(unadopted at t | reachable, λ) = e<sup>−λt</sup>",
+        "The expectation below weights applications by value within the reachable set.",
+      ],
+      [
+        "Average the survival probabilities",
+        "p − y(t) = p E(e<sup>−λt</sup>)",
+        "The plot uses two fixed positive hazards solely to illustrate the shape.",
+      ],
+      [
+        "Compute the effective hazard",
+        "h̄(t) = E(λe<sup>−λt</sup>) / E(e<sup>−λt</sup>)",
+        "Weights shift toward slower applications as time passes.",
+      ],
+      [
+        "A testable shape restriction",
+        "d h̄ / dt = −Var<sub>remaining</sub>(λ) ≤ 0",
+        "The log remaining gap is convex. With genuine heterogeneity, it is not a straight line.",
+      ],
+    ],
+  },
+  feedback: {
+    assumption:
+      "Reach is limited to p. The hazard rises with the share of reachable value already captured. Treat this as a continuum or deterministic approximation, not the exact mean of a finite stochastic process.",
+    law: "ẏ = (1 + b y/p)(p − y)",
+    solution: "y(t) = p(1 − e<sup>−(1+b)t</sup>) / (1 + b e<sup>−(1+b)t</sup>)",
+    restriction:
+      "For b > 1, growth initially accelerates and then slows. For 0 ≤ b ≤ 1, feedback exists but never produces an S-shaped level path. A positive baseline hazard allows adoption to start from zero.",
+    phase:
+      "A hump when feedback is strong enough. Growth peaks before the plateau, at y* = p(b − 1)/(2b). The example illustrates b > 1.",
+    steps: [
+      [
+        "Let experience raise the hazard",
+        "h(y) = 1 + b y/p",
+        "This is an added behavioral assumption. It could represent confidence, search effort, or learning.",
+      ],
+      [
+        "Normalize by reachable value",
+        "q = y/p; &nbsp; q̇ = (1 − q)(1 + bq)",
+        "The linear feedback term competes with depletion of remaining opportunities.",
+      ],
+      [
+        "Integrate from q(0) = 0",
+        "log[(1 + bq)/(1 − q)] = (1 + b)t",
+        "Rearranging yields the displayed solution.",
+      ],
+      [
+        "Find the change in curvature",
+        "d q̇ / dq = (b − 1) − 2bq",
+        "Since q̇ is positive inside the interval, this derivative determines the sign of q̈. Acceleration requires b > 1 and q < (b − 1)/(2b).",
+      ],
+    ],
+  },
+};
+function plot(
   id,
   {
-    xmax,
-    ymax,
-    xlabel,
-    lines = [],
-    markers = [],
+    lines,
+    xmax = 6,
+    ymin = 0,
+    ymax = 1,
+    xlabel = "Normalized time",
+    ylabel = "Share of available value",
     horiz = [],
-    area,
-    points = [],
-    percent = false,
+    vertical = [],
+    area = false,
   },
 ) {
   const el = $(id),
-    bounds = el.getBoundingClientRect(),
-    W = Math.max(360, bounds.width),
-    H = Math.max(270, (W * bounds.height) / Math.max(1, bounds.width)),
-    L = 58,
-    R = 20,
-    T = 28,
-    B = 47,
-    w = W - L - R,
-    h = H - T - B;
-  const X = (x) => L + (x / xmax) * w,
-    Y = (y) => T + h - (y / ymax) * h;
-  const path = (points) =>
-    points
+    W = Math.max(350, el.clientWidth),
+    H = 270,
+    L = 48,
+    R = 18,
+    T = 25,
+    B = 45,
+    X = (x) => L + (x / xmax) * (W - L - R),
+    Y = (y) => H - B - ((y - ymin) / (ymax - ymin)) * (H - T - B);
+  const path = (pts) =>
+    pts
       .map(
-        ([x, y], i) => `${i ? "L" : "M"}${X(x).toFixed(2)},${Y(y).toFixed(2)}`,
+        ([x, y], i) => `${i ? "L" : "M"}${X(x).toFixed(3)},${Y(y).toFixed(3)}`,
       )
       .join(" ");
-  const sample = (f) =>
-    Array.from({ length: 301 }, (_, i) => {
-      let t = (xmax * i) / 300;
-      return [t, f(t)];
-    });
-  let html = `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg"><title>${el.getAttribute("aria-label")}</title>`;
+  let svg = `<svg viewBox="0 0 ${W} ${H}"><title>${el.getAttribute("aria-label")}</title><text x="${L}" y="12">${ylabel}</text>`;
   for (let i = 0; i <= 4; i++) {
-    let y = (ymax * i) / 4;
-    html += `<line x1="${L}" x2="${W - R}" y1="${Y(y)}" y2="${Y(y)}" stroke="#dce1d8"/><text x="${L - 10}" y="${Y(y) + 4}" text-anchor="end">${Math.round(y * 100) / 100}</text>`;
+    const y = ymin + ((ymax - ymin) * i) / 4;
+    svg += `<line x1="${L}" x2="${W - R}" y1="${Y(y)}" y2="${Y(y)}" stroke="#e0e2dc"/>`;
   }
-  for (let i = 0; i <= 4; i++) {
-    let x = (xmax * i) / 4;
-    html += `<text x="${X(x)}" y="${H - 24}" text-anchor="middle">${percent ? pct(x) : fmt(x, Number.isInteger(x) ? 0 : 1)}</text>`;
-  }
-  html += `<text x="${L + w / 2}" y="${H - 3}" text-anchor="middle">${xlabel}</text>`;
-  if (area) {
-    const a = sample(area[0]),
-      b = sample(area[1]).reverse();
-    html += `<path d="${path([...a, ...b])}Z" fill="#167463" opacity=".075"/>`;
-  }
+  svg += `<text x="${L - 8}" y="${Y(0) + 4}" text-anchor="end">0</text><text x="${W / 2}" y="${H - 6}" text-anchor="middle">${xlabel}</text>`;
   for (const z of horiz)
-    html += `<line x1="${X(z.start || 0)}" x2="${W - R}" y1="${Y(z.y)}" y2="${Y(z.y)}" stroke="${z.color}" stroke-dasharray="5 5" opacity=".6"/><text x="${W - R - 4}" y="${Y(z.y) - 7}" text-anchor="end" style="font-size:11px">${z.label}</text>`;
-  for (const z of markers)
-    html += `<line x1="${X(z.x)}" x2="${X(z.x)}" y1="${T}" y2="${T + h}" stroke="${z.color || "#87998a"}" stroke-dasharray="${z.dash || "3 5"}"/><text x="${clamp(X(z.x) + 5, L, W - R - 75)}" y="${T - 10}" style="font-size:11px">${z.label || ""}</text>`;
+    svg += `<line x1="${L}" x2="${W - R}" y1="${Y(z.y)}" y2="${Y(z.y)}" stroke="#9ca89c" stroke-dasharray="3 4"/><text x="${W - R}" y="${Y(z.y) - 6}" text-anchor="end">${z.label}</text>`;
+  for (const z of vertical)
+    svg += `<line x1="${X(z.x)}" x2="${X(z.x)}" y1="${T}" y2="${H - B}" stroke="#9ca89c" stroke-dasharray="3 4"/><text x="${Math.min(X(z.x) + 5, W - 80)}" y="${T + 13}">${z.label}</text>`;
   for (const l of lines)
-    html += `<path d="${path(l.points || sample(l.fn))}" fill="none" stroke="${l.color}" stroke-width="${l.width || 3}" ${l.dash ? `stroke-dasharray="${l.dash}"` : ""} stroke-linecap="round" stroke-linejoin="round"/>`;
-  for (const p of points)
-    html += `<circle cx="${X(p.x)}" cy="${Y(p.y)}" r="5" fill="${p.color}" stroke="#fffef9" stroke-width="2"/>`;
-  el.innerHTML = html + "</svg>";
-  el._scale = { L, R, W, xmax };
+    svg += `<path d="${path(l.points)}" stroke="${l.color || "#245b50"}" stroke-width="2.5" fill="none" ${l.dash ? 'stroke-dasharray="5 4"' : ""}/>`;
+  el.innerHTML = svg + "</svg>";
 }
-function stepPoints(ts, coached) {
-  let y = 0,
-    out = [[0, 0]];
-  for (const t of ts
-    .filter((x) => x.time <= s.H && (coached || x.kind === "original"))
-    .sort((a, b) => a.time - b.time)) {
-    out.push([t.time, y]);
-    y += s.V / 100;
-    out.push([t.time, y]);
-  }
-  out.push([s.H, y]);
-  return out;
-}
-function render() {
-  sync();
-  const ts = tasks(s),
-    b = baseline(s.time, s),
-    g = total(s.time, s),
-    extra = uplift(s.time, s);
-  $("p-out").textContent = pct(s.p);
-  $("d-out").textContent = `+${Math.round(s.d * 100)} pp`;
-  $("h-out").textContent = `${fmt(s.h)} wk`;
-  $("tc-out").textContent = `week ${fmt(s.tc, 2).replace(/\.?0+$/, "") || "0"}`;
-  $("V-out").textContent = `${s.V} h/week`;
-  $("H-out").textContent = `${s.H} weeks`;
-  $("time-out").textContent = fmt(s.time);
-  $("k-out").textContent = pct(s.k);
-  const lines = [
-    { fn: (t) => baseline(t, s), color: "#bb582f" },
-    { fn: (t) => total(t, s), color: "#167463" },
-  ];
-  if (s.sample)
-    lines.push(
+const samples = (f, T = 6, n = 400) =>
+  Array.from({ length: n + 1 }, (_, i) => [(T * i) / n, f((T * i) / n)]);
+function renderModel() {
+  const m = models[model],
+    p = model === "universal" ? 1 : P,
+    horizon = model === "feedback" ? 1.5 : 6;
+  $("model-summary").innerHTML =
+    `<div class="summary-grid"><div><p class="label">Behavioral restriction</p><p>${m.assumption}</p></div><div><p class="label">Law of motion</p><p class="formula">${m.law}</p><p class="label">Solution from zero adoption</p><p class="formula">${m.solution}</p></div></div>`;
+  let fn = (t) => curve(model, t),
+    ymin = 0,
+    ymax = 1.08,
+    ylabel = "y",
+    horiz = [
       {
-        points: stepPoints(ts, false),
-        color: "#bb582f",
-        width: 1.5,
-        dash: "3 3",
-      },
-      {
-        points: stepPoints(ts, true),
-        color: "#167463",
-        width: 1.5,
-        dash: "3 3",
-      },
-    );
-  chart("main-chart", {
-    xmax: s.H,
-    ymax: s.V * 1.12,
-    xlabel: "Weeks since starting",
-    lines,
-    area: [(t) => total(t, s), (t) => baseline(t, s)],
-    markers: [
-      { x: s.tc, label: "Coaching" },
-      { x: s.time, color: "#203b35", dash: "1 0" },
-    ],
-    horiz: [
-      {
-        y: s.V * s.p,
-        color: "#bb582f",
+        y: p,
         label:
-          s.d === 0
-            ? `Plateau: ${fmt(s.V * s.p)} h/wk`
-            : `Before: ${fmt(s.V * s.p)} h/wk`,
-      },
-      {
-        y: s.V * (s.p + s.d),
-        color: "#167463",
-        label: s.d === 0 ? "" : `After: ${fmt(s.V * (s.p + s.d))} h/wk`,
-        start: s.tc,
+          model === "universal" ? "Full opportunity: 1" : "Reachable share: p",
       },
     ],
-    points: [
-      { x: s.time, y: b, color: "#bb582f" },
-      { x: s.time, y: g, color: "#167463" },
-    ],
+    caption =
+      "The plateau is a restriction on reach. The speed and curvature describe the process of approaching it.";
+  if (view === "growth") {
+    fn = (t) => growth(model, t);
+    ymax = Math.max(1, ...samples(fn).map((x) => x[1])) * 1.1;
+    ylabel = "ẏ";
+    horiz = [];
+    caption =
+      model === "feedback"
+        ? "Strong feedback first raises growth; depletion eventually wins. This is acceleration in the level, not just continued improvement."
+        : "Growth falls throughout. A curved level path is not evidence of accelerating learning.";
+  }
+  if (view === "gap") {
+    fn = (t) => logGap(model, t);
+    ymin = Math.min(fn(horizon), -1) * 1.05;
+    ymax = 0.2;
+    ylabel = "log[(p − y)/p]";
+    horiz = [];
+    caption =
+      model === "heterogeneous"
+        ? "The slope becomes less negative: the remaining applications have lower hazards."
+        : model === "feedback"
+          ? "The slope becomes more negative: the hazard rises with adoption."
+          : "A straight line: the remaining gap shrinks at a constant proportional rate. Its slope is minus the hazard.";
+  }
+  plot("time-chart", {
+    lines: [{ points: samples(fn, horizon) }],
+    xmax: horizon,
+    ymin,
+    ymax,
+    ylabel,
+    horiz,
   });
-  $("metric-base").innerHTML = `${fmt(b)} <small>h/week</small>`;
-  $("metric-total").innerHTML = `${fmt(g)} <small>h/week</small>`;
-  $("metric-cumulative").innerHTML =
-    `${fmt(cumulative(s.time, s))} <small>hours</small>`;
-  $("insight").textContent =
-    s.d === 0
-      ? "No expansion in reach means no coaching benefit in this model. The two expected curves coincide."
-      : s.time < s.tc
-        ? `Coaching has not happened yet. At week ${fmt(s.tc)}, it will put another ${Math.round(s.d * 100)} applications within reach. There is no advance effect.`
-        : `At week ${fmt(s.time)}, coaching adds ${fmt(extra)} hours saved per week. That gap approaches ${fmt(s.V * s.d)} h/week. The adjustment half-time stays ${fmt(s.h)} weeks; the initial slope increase fades as the new applications are adopted.`;
-  const sorted = [...ts].sort((a, b) => a.id - b.id),
-    n = ts.filter((x) => x.time <= s.time).length,
-    opened = s.time >= s.tc,
-    reachable = Math.round(100 * (s.p + (opened ? s.d : 0)));
-  $("task-grid").innerHTML = sorted
-    .map((t) => {
-      const adopted = t.time <= s.time,
-        newOpen = t.kind === "new" && opened;
-      const status = adopted
-        ? "adopted" + (newOpen ? " newly" : "")
-        : newOpen
-          ? "new"
-          : t.kind === "original"
-            ? "waiting"
-            : "";
-      const desc = adopted
-        ? `Adopted at week ${fmt(t.time)}${newOpen ? " after coaching expanded reach" : ""}`
-        : newOpen
-          ? "Newly reachable after coaching, awaiting adoption"
-          : t.kind === "original"
-            ? "Reachable, awaiting adoption"
-            : "Outside current reach";
-      return `<div class="tile ${status}" title="Application ${t.id + 1}: ${desc}" role="img" aria-label="Application ${t.id + 1}: ${desc}"></div>`;
-    })
-    .join("");
-  $("task-week").textContent = `ONE SIMULATED PERSON / WEEK ${fmt(s.time)}`;
-  $("task-count").textContent = `${n} of 100 adopted`;
-  $("task-description").textContent =
-    `${reachable - n} reachable but still waiting; ${100 - reachable} outside reach. This person saves ${fmt(realised(s.time, s, ts))} h/week, compared with the expected ${fmt(g)}.`;
-  $("task-value").textContent = `${fmt(s.V / 100, 2)} h/week`;
-  chart("compare-chart", {
-    xmax: s.H,
-    ymax: s.V * 1.12,
-    xlabel: "Weeks since starting",
+  $("time-caption").textContent = caption;
+  const phase = samples((t) => t, model === "heterogeneous" ? 24 : 10, 600).map(
+    ([t]) => [curve(model, t), growth(model, t)],
+  );
+  phase.push([p, 0]);
+  plot("phase-chart", {
+    lines: [{ points: phase }],
+    xmax: 1.05,
+    ymax: Math.max(1, ...phase.map((x) => x[1])) * 1.1,
+    xlabel: "Current share captured, y",
+    ylabel: "Growth, ẏ",
+    vertical: [{ x: p, label: model === "universal" ? "1" : "p" }],
+  });
+  $("phase-caption").textContent = m.phase;
+  $("restriction").innerHTML =
+    `<span class="label">OBSERVABLE RESTRICTION</span><p>${m.restriction}</p>`;
+  $("derivation-body").innerHTML =
+    `<div class="steps">${m.steps.map(([title, eq, text]) => `<div class="step"><div><h3>${title}</h3><p class="formula">${eq}</p><p>${text}</p></div></div>`).join("")}</div>`;
+}
+const coaching = {
+  reach: {
+    continuity: "Level is continuous; growth jumps upward.",
+    longrun: "A higher plateau: p + Δp.",
+    rate: "The same proportional adjustment speed.",
+    eq: "Δy(s) = Δp (1 − e<sup>−s</sup>)",
+    text: "For s ≥ 0 after coaching, the gain builds toward Δp. Coaching makes additional value reachable; adoption takes time. A near-instant observed jump can be fast adjustment between observations, without a literal discontinuity.",
+  },
+  speed: {
+    continuity: "Level is continuous; growth jumps upward.",
+    longrun: "The same plateau: p.",
+    rate: "A permanently higher hazard k > 1.",
+    eq: "Δy(s) = (p − y<sub>c</sub>)(e<sup>−s</sup> − e<sup>−ks</sup>)",
+    text: "The benefit is positive at intermediate horizons but vanishes as both paths approach p. This buys earlier gains, not a permanently higher level. y꜀ is adoption immediately before coaching.",
+  },
+  stock: {
+    continuity: "The level jumps by J; subsequent growth falls.",
+    longrun: "The same plateau: p.",
+    rate: "The hazard stays fixed; less reachable value remains.",
+    eq: "Δy(s) = J e<sup>−s</sup>",
+    text: "The initial lead decays because the counterfactual catches up. A stock jump alone cannot generate a permanent gap with a shared fixed plateau. The illustrated jump is feasible: J ≤ p − y꜀.",
+  },
+};
+function renderCoach() {
+  const c = coaching[coach];
+  let pts = samples((t) => coached(coach, t));
+  if (coach === "stock") {
+    pts = pts.filter(([t]) => t !== 2);
+    pts.push([2, curve("restricted", 2)], [2, coached(coach, 2)]);
+    pts.sort((a, b) => a[0] - b[0]);
+  }
+  plot("coach-chart", {
     lines: [
-      { fn: (t) => baseline(t, s), color: "#bb582f" },
-      { fn: (t) => s.V * -Math.expm1(-rate(s.h) * s.p * t), color: "#7964a4" },
+      {
+        points: samples((t) => curve("restricted", t)),
+        color: "#a66b4c",
+        dash: true,
+      },
+      { points: pts },
     ],
+    ymax: 1.05,
+    ylabel: "y",
+    vertical: [{ x: 2, label: "Coaching" }],
     horiz: [
-      { y: s.V, color: "#7964a4", label: "All available value" },
-      { y: s.V * s.p, color: "#bb582f", label: "Limited-reach plateau" },
+      {
+        y: coach === "reach" ? 0.75 : P,
+        label: coach === "reach" ? "p + Δp" : "p",
+      },
     ],
   });
-  $("compare-insight").textContent =
-    s.p === 0
-      ? "At p = 0, matching the initial slope also gives the alternative a zero adoption rate. Both stay at zero; the alternative no longer predicts eventual universal adoption."
-      : s.p === 1
-        ? "At p = 100%, the two models are identical: every application is reachable at the same rate."
-        : `Both begin gaining ${fmt(s.V * s.p * rate(s.h), 2)} h/week of value per elapsed week. Limited reach settles at ${fmt(s.V * s.p)} h/week; slower universal adoption eventually reaches ${s.V}. Extend the horizon to see the difference.`;
-  chart("target-chart", {
-    xmax: 1,
-    ymax: s.V * 1.05,
-    xlabel: "Starting share within reach (p)",
-    percent: true,
-    lines: [{ fn: (p) => s.V * response(p, s.k, s.rule), color: "#167463" }],
-    markers: [{ x: s.p, label: "Your p" }],
-    points: [{ x: s.p, y: s.V * response(s.p, s.k, s.rule), color: "#167463" }],
-  });
-  const explanations = {
-    fixed: `δ = min(k, 1 − p). Everyone gets the same increase until there is too little room left. Below that ceiling, low and high adopters benefit equally.`,
-    remaining: `δ = k(1 − p). Coaching unlocks the same fraction of what remains. Lower adopters benefit more because this rule makes them more responsive.`,
-    middle: `δ = kp(1 − p). Response grows with existing proficiency but shrinks with remaining room. Benefits peak at p = 50%; this is an added assumption, not a result of the adoption model.`,
-  };
-  $("target-insight").textContent =
-    `${explanations[s.rule]} With k = ${pct(s.k)}, your selected p gives a long-run gain of ${fmt(s.V * response(s.p, s.k, s.rule))} h/week.`;
+  $("coach-properties").innerHTML =
+    `<dl><dt>AT THE INTERVENTION</dt><dd>${c.continuity}</dd><dt>LONG RUN</dt><dd>${c.longrun}</dd><dt>ADOPTION PROCESS</dt><dd>${c.rate}</dd></dl>`;
+  $("coach-equation").innerHTML =
+    `<span class="label">GAIN RELATIVE TO NO COACHING</span><p class="formula">${c.eq}</p><p>${c.text}</p>`;
 }
-for (const key of ["p", "d", "h", "tc", "V", "H", "time", "k"])
-  $(key).addEventListener("input", () => {
-    s[key] = +$(key).value / (["p", "d", "k"].includes(key) ? 100 : 1);
-    s.time = Math.min(s.time, s.H);
-    s.tc = Math.min(s.tc, s.H);
-    document
-      .querySelectorAll("[data-preset]")
-      .forEach((x) => x.classList.remove("active"));
-    render();
-  });
-$("sample").addEventListener("change", () => {
-  s.sample = $("sample").checked;
-  render();
-});
-$("rule").addEventListener("change", () => {
-  s.rule = $("rule").value;
-  render();
-});
-function stop() {
-  clearInterval(timer);
-  timer = null;
-  $("play").textContent = "▶ Play";
-  $("play").setAttribute("aria-label", "Play timeline");
+const facts = {
+  plateau: {
+    rows: [
+      [
+        "Universal adoption",
+        "Rules it out",
+        "With a strictly positive common hazard, y tends to 1.",
+      ],
+      [
+        "Limited reach",
+        "Allows it",
+        "y tends to p < 1. The inaccessible share is explicit.",
+      ],
+      [
+        "Unequal task hazards",
+        "Allows it here",
+        "The displayed model already includes limited reach. Heterogeneity alone, with all hazards positive and p = 1, does not lower the eventual plateau.",
+      ],
+      [
+        "Adoption feedback",
+        "Allows it here",
+        "The plateau comes from p, not from feedback.",
+      ],
+    ],
+    note: "A persistent low plateau favors a limited reachable set, but over finite horizons very slow adoption remains an alternative.",
+  },
+  acceleration: {
+    rows: [
+      [
+        "Universal adoption",
+        "Rules it out",
+        "Growth is positive but decreasing from zero adoption.",
+      ],
+      [
+        "Limited reach",
+        "Rules it out",
+        "A fixed p and constant hazard imply ẏ decreases with y.",
+      ],
+      [
+        "Unequal task hazards",
+        "Rules it out",
+        "A positive mixture of exponential adoption curves is concave.",
+      ],
+      [
+        "Adoption feedback",
+        "Allows it",
+        "Only when feedback is sufficiently strong: b > 1, early in the path.",
+      ],
+    ],
+    note: "Unobserved changes in opportunity or technology could also produce acceleration. They are held fixed in this comparison.",
+  },
+  jump: {
+    rows: [
+      [
+        "Expand reach",
+        "No literal jump",
+        "The adoption process is continuous, although the slope changes immediately.",
+      ],
+      [
+        "Raise hazard",
+        "No literal jump",
+        "A finite change in the hazard changes the slope, not the state.",
+      ],
+      [
+        "Shift current adoption",
+        "Allows it",
+        "The intervention directly changes the state by J.",
+      ],
+    ],
+    note: "Measurements spaced weeks apart cannot establish a mathematical discontinuity. Rapid adjustment can look like a jump.",
+  },
+  persistent: {
+    rows: [
+      ["Expand reach", "Allows it", "The long-run effect equals Δp > 0."],
+      [
+        "Raise hazard",
+        "Rules it out alone",
+        "Both trajectories converge to the same p. The gain is one of timing.",
+      ],
+      [
+        "Shift current adoption",
+        "Rules it out alone",
+        "The initial lead disappears when the counterfactual catches up.",
+      ],
+    ],
+    note: "A gain that lasts through a short follow-up is not yet evidence of a permanent change in the plateau.",
+  },
+};
+function renderFact() {
+  const f = facts[$("fact").value];
+  $("fact-result").innerHTML =
+    `<table><thead><tr><th>Specification</th><th>Implication</th><th>Reason</th></tr></thead><tbody>${f.rows.map((r) => `<tr><td>${r[0]}</td><td class="${r[1].startsWith("Allows") ? "yes" : "no"}">${r[1]}</td><td>${r[2]}</td></tr>`).join("")}</tbody></table><p class="note">${f.note}</p>`;
 }
-$("play").onclick = () => {
-  if (timer) return stop();
-  if (s.time >= s.H) s.time = 0;
-  $("play").textContent = "Ⅱ Pause";
-  $("play").setAttribute("aria-label", "Pause timeline");
-  timer = setInterval(() => {
-    s.time = Math.min(s.H, s.time + s.H / 150);
-    render();
-    if (s.time >= s.H) stop();
-  }, 80);
-};
-$("reset").onclick = () => {
-  stop();
-  s = { ...defaults };
-  render();
-  document
-    .querySelectorAll("[data-preset]")
-    .forEach((x) =>
-      x.classList.toggle("active", x.dataset.preset === "default"),
-    );
-};
-$("resample").onclick = () => {
-  s.seed = (s.seed + 1) % 2147483647 || 1;
-  s.sample = true;
-  render();
-};
-const presets = {
-  default: {},
-  stuck: { p: 0.08, d: 0, h: 1, tc: 4, time: 10 },
-  fast: { p: 0.2, d: 0.4, h: 0.2, tc: 4, time: 5 },
-  ceiling: { p: 0.9, d: 0.1, h: 1, tc: 4, time: 8 },
-};
-document.querySelectorAll("[data-preset]").forEach(
-  (el) =>
-    (el.onclick = () => {
-      stop();
-      s = { ...defaults, ...presets[el.dataset.preset] };
-      document
-        .querySelectorAll("[data-preset]")
-        .forEach((x) => x.classList.toggle("active", x === el));
-      render();
+document.querySelectorAll("[data-model]").forEach(
+  (b) =>
+    (b.onclick = () => {
+      model = b.dataset.model;
+      document.querySelectorAll("[data-model]").forEach((x) => {
+        x.classList.toggle("active", x === b);
+        x.setAttribute("aria-pressed", String(x === b));
+      });
+      renderModel();
     }),
 );
-$("main-chart").addEventListener("click", (e) => {
-  const a = $("main-chart")._scale,
-    r = $("main-chart").getBoundingClientRect();
-  s.time = clamp(
-    ((((e.clientX - r.left) / r.width) * a.W - a.L) / (a.W - a.L - a.R)) *
-      a.xmax,
-    0,
-    s.H,
-  );
-  render();
-});
-$("copy").onclick = async () => {
-  const hash = new URLSearchParams(
-    Object.entries(s).map(([k, v]) => [
-      k,
-      String(typeof v === "number" ? Math.round(v * 10000) / 10000 : v),
-    ]),
-  );
-  history.replaceState(null, "", `#${hash}`);
-  try {
-    await navigator.clipboard.writeText(location.href);
-    $("copy-status").textContent = "Copied — all settings included.";
-  } catch {
-    $("copy-status").textContent =
-      "Settings saved in the address bar. Copy that URL to share.";
-  }
+document.querySelectorAll("[data-coach]").forEach(
+  (b) =>
+    (b.onclick = () => {
+      coach = b.dataset.coach;
+      document.querySelectorAll("[data-coach]").forEach((x) => {
+        x.classList.toggle("active", x === b);
+        x.setAttribute("aria-pressed", String(x === b));
+      });
+      renderCoach();
+    }),
+);
+$("view").onchange = () => {
+  view = $("view").value;
+  renderModel();
 };
-let resizeTimer;
+$("fact").onchange = renderFact;
+$("derive").onclick = () => {
+  const open = $("derivation-body").hidden;
+  $("derivation-body").hidden = !open;
+  $("derive").setAttribute("aria-expanded", String(open));
+  $("derive").innerHTML =
+    `${open ? "Hide" : "Show"} the derivation <span>${open ? "−" : "＋"}</span>`;
+};
+function render() {
+  renderModel();
+  renderCoach();
+  renderFact();
+}
+let timer;
 window.addEventListener("resize", () => {
-  clearTimeout(resizeTimer);
-  resizeTimer = setTimeout(render, 100);
+  clearTimeout(timer);
+  timer = setTimeout(render, 100);
 });
 render();
-
-window.addEventListener("hashchange", () => {
-  stop();
-  readSettings();
-  document
-    .querySelectorAll("[data-preset]")
-    .forEach((el) => el.classList.remove("active"));
-  render();
-});
