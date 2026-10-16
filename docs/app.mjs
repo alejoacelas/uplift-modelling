@@ -25,34 +25,38 @@ const $ = (id) => document.getElementById(id),
   };
 let s = { ...defaults },
   timer = null;
-try {
-  const q = new URLSearchParams(location.hash.slice(1));
-  for (const key of ["p", "d", "h", "tc", "V", "H", "time", "seed", "k"])
-    if (q.has(key) && Number.isFinite(+q.get(key))) s[key] = +q.get(key);
-  s.p = clamp(Math.round(s.p * 100), 0, 100) / 100;
-  s.d = clamp(Math.round(s.d * 100), 0, 100) / 100;
-  s.h = clamp(s.h, 0.2, 12);
-  s.H = clamp(s.H, 4, 52);
-  s.V = clamp(s.V, 1, 30);
-  s.tc = clamp(s.tc, 0, s.H);
-  s.time = clamp(s.time, 0, s.H);
-  s.k = clamp(s.k, 0, 1);
-  s.seed = Math.floor(clamp(s.seed, 1, 2147483647));
-  s.sample = q.get("sample") === "true";
-  if (["fixed", "remaining", "middle"].includes(q.get("rule")))
-    s.rule = q.get("rule");
-} catch {}
+function readSettings() {
+  s = { ...defaults };
+  try {
+    const q = new URLSearchParams(location.hash.slice(1));
+    for (const key of ["p", "d", "h", "tc", "V", "H", "time", "seed", "k"])
+      if (q.has(key) && Number.isFinite(+q.get(key))) s[key] = +q.get(key);
+    s.p = clamp(Math.round(s.p * 100), 0, 100) / 100;
+    s.d = clamp(Math.round(s.d * 100), 0, 100) / 100;
+    s.h = clamp(s.h, 0.2, 12);
+    s.H = clamp(s.H, 4, 52);
+    s.V = clamp(s.V, 1, 30);
+    s.tc = clamp(s.tc, 0, s.H);
+    s.time = clamp(s.time, 0, s.H);
+    s.k = clamp(s.k, 0, 1);
+    s.seed = Math.floor(clamp(s.seed, 1, 2147483647));
+    s.sample = q.get("sample") === "true";
+    if (["fixed", "remaining", "middle"].includes(q.get("rule")))
+      s.rule = q.get("rule");
+  } catch {}
+}
+readSettings();
 const fmt = (n, d = 1) => n.toFixed(d),
   pct = (n) => `${Math.round(n * 100)}%`;
 function sync() {
   s.d = Math.min(s.d, 1 - s.p);
+  $("d").max = Math.round((1 - s.p) * 100);
+  $("tc").max = s.H;
+  $("time").max = s.H;
   for (const key of ["p", "d", "h", "tc", "V", "H", "time", "k"])
     $(key).value = ["p", "d", "k"].includes(key)
       ? Math.round(s[key] * 100)
       : s[key];
-  $("d").max = Math.round((1 - s.p) * 100);
-  $("tc").max = s.H;
-  $("time").max = s.H;
   $("sample").checked = s.sample;
   $("rule").value = s.rule;
 }
@@ -372,3 +376,12 @@ window.addEventListener("resize", () => {
   resizeTimer = setTimeout(render, 100);
 });
 render();
+
+window.addEventListener("hashchange", () => {
+  stop();
+  readSettings();
+  document
+    .querySelectorAll("[data-preset]")
+    .forEach((el) => el.classList.remove("active"));
+  render();
+});
