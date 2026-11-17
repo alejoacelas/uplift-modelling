@@ -1,5 +1,6 @@
 # uplift-modelling
 
+Tags: ai-uplift, modelling, explainer
 Scope: Explore simple models of AI adoption and coaching through an interactive mathematical explainer.
 
 - Visibility: public; use illustrative scenarios, not private participant data.
